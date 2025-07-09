@@ -260,7 +260,7 @@ async function scoreSession(sessionId, projectName, sessionName) {
             scoreBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
         }
         
-        const result = SessionAPI.scoreSession(sessionId,projectName,sessionName);
+        const result = await SessionAPI.scoreSession(sessionId,projectName,sessionName);
         
         if (result.success) {
             showNotification(`Scoring started for ${sessionName}`, 'success');
