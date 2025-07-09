@@ -33,7 +33,7 @@ class ModelService:
             for model_dic in self.models.values()
         ]
     
-    def score_session_async(self, project_path, session_name, session_id, model_name='SmokingCNN'):
+    def score_session_async(self, project_path, session_name, session_id, model_name='PuffSegmentation'):
         """Start async scoring of a session"""
         # Generate unique scoring ID
         scoring_id = str(uuid.uuid4())
@@ -74,7 +74,7 @@ class ModelService:
                 }
             
             # load puff seg model
-            puff_model = PuffSegmentationModel(in_channels=3, out_channels=1)
+            puff_model = PuffSegmentation(in_channels=3, out_channels=1)
             if os.path.exists('puff_model.pt'): #hard coded needs to be fixed
                 puff_model.load_state_dict(torch.load('puff_model.pt', map_location='cpu'))
                 puff_model.eval()
@@ -123,7 +123,6 @@ class ModelService:
                 'end_time': time.time(),
                 'bouts_count': len(new_bouts)
             })
-            print(self.scoring_status)
         except Exception as e:
             print(f"Error during scoring: {e}")
             # Handle error (e.g., log it, update status, etc.)
@@ -171,7 +170,6 @@ class ModelService:
 
         # prepare data
         data = torch.tensor(df[['accel_x', 'accel_y', 'accel_z']].values, dtype=torch.float32).T  # (3, seq_len)
-        
         # create sliding windows
         if data.shape[1] < window_size:
             # pad if too short
@@ -182,10 +180,11 @@ class ModelService:
         windowed_data = data.unfold(dimension=1, size=window_size, step=window_stride)
         windowed_data = windowed_data.permute(1, 0, 2)  # (n_windows, channels, window_size)
         
-        print(f"created {windowed_data.shape[0]} windows of size {window_size}")
+        print(f"data with shape  {windowed_data.shape} ")
 
         with torch.no_grad():
             y_pred = model(windowed_data).sigmoid().cpu()  # (n_windows, window_size)
+            print(torch.sum(y_pred > 0.5))
             y_pred = y_pred > 0.5  # threshold
             
             # reconstruct full timeline
@@ -211,8 +210,8 @@ class ModelService:
             if df['y_pred'].iloc[i] > 0:
                 if current_bout is None:
                     current_bout = [int(df['ns_since_reboot'].iloc[i]), None]
-                else:
-                    current_bout[1] = int(df['ns_since_reboot'].iloc[i])
+                # else:
+                current_bout[1] = int(df['ns_since_reboot'].iloc[i])
             else:
                 if current_bout is not None:
                     smoking_bouts.append(current_bout)
@@ -228,7 +227,7 @@ class ModelService:
                 'label': label
             }
             for bout in smoking_bouts 
-            if ((bout[1] - bout[0]) >= 30 * 1e9) and (model_name == 'SmokingCNN')
+            if ((bout[1] - bout[0]) >= 2 * 1e9)
         ]
         
         print(f"generated {len(smoking_bouts)} bouts with label: {label} in _extract_bouts_from_predictions")
@@ -276,7 +275,7 @@ class DoubleConv(nn.Module):
     def forward(self, x):
         return self.double_conv(x)
 
-class PuffSegmentationModel(nn.Module):
+class PuffSegmentation(nn.Module):
     def __init__(self, in_channels=3, out_channels=1):
         super().__init__()
 
